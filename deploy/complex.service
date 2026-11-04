@@ -1,0 +1,22 @@
+# RobertBlok.com — Fullstack development
+# systemd unit for the Complex runtime serving complex.robertblok.com
+[Unit]
+Description=Complex runtime — complex.robertblok.com
+After=network.target
+
+[Service]
+User=complex
+Group=complex
+WorkingDirectory=/srv/complex
+ExecStart=/srv/complex/complex serve /srv/complex/site 127.0.0.1:8080
+Restart=on-failure
+RestartSec=2
+# Hardening: the process can only read its own folder and listen on localhost.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadOnlyPaths=/srv/complex
+
+[Install]
+WantedBy=multi-user.target

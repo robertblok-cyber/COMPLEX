@@ -1,0 +1,10 @@
+# RobertBlok.com — Fullstack development
+# Caddy terminates TLS (Let's Encrypt, automatic) and proxies to the Complex runtime.
+complex.robertblok.com {
+	reverse_proxy 127.0.0.1:8080
+	encode gzip
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
+}
