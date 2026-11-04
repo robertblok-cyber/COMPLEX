@@ -1,0 +1,80 @@
+// RobertBlok.com — Fullstack development
+//
+// Home, the page about Complex itself, and contact.
+
+page "/" {
+  let intro = "Fullstack developer. Twenty years of building for the web, most of it for government."
+  view {
+    layout(title: "Home", current: "/") {
+      cmd(text: "whoami")
+      h1 { site.author }
+      p(class: "lead") { intro }
+
+      cmd(text: "cat README.md")
+      p {
+        "This site is not written in PHP, JavaScript or HTML. It is written in ",
+        a(href: "/complex") { "Complex" },
+        ", a programming language I am building: one language for database, server and browser, with a compiler that refuses unsafe code."
+      }
+      p { "Every page you see here is a " code { ".complex" } " file, rendered by a runtime written in Rust." }
+
+      cmd(text: "ls")
+      ul(class: "links") {
+        for item in nav {
+          if item.href != "/" {
+            li { a(href: item.href) { item.label + "/" } }
+          }
+        }
+      }
+    }
+  }
+}
+
+page "/complex" {
+  let principles = [
+    { n: "01", title: "Complex in power, simple to read.",      body: "The compiler does the hard work. Syntax is a user interface." },
+    { n: "02", title: "One type from database to screen.",      body: "A field exists once. Rename it and the build breaks, never a visitor." },
+    { n: "03", title: "Security is grammar.",                   body: "A secret cannot reach a view. A server action without a permission rule does not compile." },
+    { n: "04", title: "Errors are values, not exceptions.",     body: "Every call to the outside has a timeout and a fallback." },
+    { n: "05", title: "Adoption is a requirement.",             body: "One binary, built-in storage, error messages written for humans." }
+  ]
+  // A demonstration of information flow control: the type system
+  // guarantees this value can only appear masked.
+  let api_key = secret("sk-live-4f9a2c7e1b")
+
+  view {
+    layout(title: "Complex", current: "/complex") {
+      cmd(text: "complex version")
+      h1 { "Complex" }
+      p(class: "lead") { "One language for the whole web application." }
+
+      cmd(text: "cat principles.md")
+      ol(class: "principles") {
+        for p in principles {
+          li { span(class: "n") { p.n }, strong { p.title }, " ", p.body }
+        }
+      }
+
+      cmd(text: "cat secret.complex")
+      p {
+        "This page holds a value of type ", code { "Secret<Text>" },
+        ". Writing it into the view is a compile error, so the only thing that can ever be shown is this: ",
+        code { masked(api_key, 4) }
+      }
+      p(class: "dim") { "The compiler proves it. No code review has to find it." }
+
+      cmd(text: "git remote -v")
+      p { a(href: site.github) { site.github } }
+    }
+  }
+}
+
+page "/contact" {
+  view {
+    layout(title: "Contact", current: "/contact") {
+      cmd(text: "cat contact.txt")
+      p { "Mail: ", a(href: "mailto:" + site.email) { site.email } }
+      p { "Code: ", a(href: site.github) { "github.com/robertblok-cyber" } }
+    }
+  }
+}

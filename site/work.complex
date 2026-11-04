@@ -1,0 +1,87 @@
+// RobertBlok.com — Fullstack development
+//
+// Portfolio: the projects and the page that lists them.
+
+let projects = [
+  {
+    slug:  "government-sites",
+    title: "Websites for government clients",
+    year:  "2004 – now",
+    stack: "PHP · MediaWiki · accessible HTML",
+    summary: "Twenty years of public-sector web work: content platforms, intranets and public sites that have to be fast, accessible and maintainable for a decade.",
+    live:  true
+  },
+  {
+    slug:  "atlasmuseum",
+    title: "Atlasmuseum",
+    year:  "2026",
+    stack: "MediaWiki · Wikibase · a fast front-end app",
+    summary: "An atlas of public art in France on MediaWiki, with a fast front-end for browsing artworks on a map.",
+    live:  true
+  },
+  {
+    slug:  "opbaarkamer",
+    title: "Opbaarkamer.nl",
+    year:  "2026",
+    stack: "PHP · MySQL",
+    summary: "A booking platform for mortuary rooms, built for a funeral business.",
+    live:  true
+  },
+  {
+    slug:  "jouwdrank",
+    title: "JouwDrank.nl",
+    year:  "2026",
+    stack: "PHP · webshop",
+    summary: "A webshop for a liquor store, including the back office.",
+    live:  true
+  },
+  {
+    slug:  "complex",
+    title: "Complex",
+    year:  "2026 –",
+    stack: "Rust · a language, a compiler, a runtime",
+    summary: "One language for the whole web application. This site is written in it.",
+    live:  false
+  }
+]
+
+component card(project: Text, title: Text, year: Text, stack: Text, summary: Text, live: Bool) {
+  article(class: "card") {
+    h3 { a(href: "/work/" + project) { title } }
+    p(class: "meta") {
+      span { year }, " · ", span { stack },
+      if live { span(class: "badge live") { "live" } } else { span(class: "badge") { "in progress" } }
+    }
+    p { summary }
+  }
+}
+
+page "/work" {
+  view {
+    layout(title: "Work", current: "/work") {
+      cmd(text: "ls -la ~/work")
+      p(class: "dim") { len(projects) + " projects" }
+      section(class: "cards") {
+        for p in projects {
+          card(project: p.slug, title: p.title, year: p.year, stack: p.stack, summary: p.summary, live: p.live)
+        }
+      }
+    }
+  }
+}
+
+page "/work/:slug" {
+  view {
+    layout(title: "Work", current: "/work") {
+      for p in projects {
+        if p.slug == slug {
+          cmd(text: "cat ~/work/" + p.slug + ".md")
+          h1 { p.title }
+          p(class: "meta") { p.year, " · ", p.stack }
+          p { p.summary }
+          p { a(href: "/work") { "← back" } }
+        }
+      }
+    }
+  }
+}

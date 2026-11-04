@@ -1,0 +1,61 @@
+// RobertBlok.com — Fullstack development
+//
+// Shared data and layout for complex.robertblok.com.
+// Everything in this folder is one program; files only group it.
+
+let site = {
+  name:    "robertblok.com",
+  tagline: "Fullstack development",
+  author:  "Robert Blok",
+  email:   "info@robertblok.com",
+  github:  "https://github.com/robertblok-cyber/COMPLEX"
+}
+
+let nav = [
+  { href: "/",         label: "~" },
+  { href: "/work",     label: "work" },
+  { href: "/complex",  label: "complex" },
+  { href: "/contact",  label: "contact" }
+]
+
+// The page shell: head, header with navigation, content, footer.
+component layout(title: Text, current: Text) {
+  html(lang: "en") {
+    head {
+      meta(charset: "utf-8")
+      meta(name: "viewport", content: "width=device-width, initial-scale=1")
+      title { title + " — " + site.name }
+      meta(name: "description", content: site.author + " — " + site.tagline)
+      link(rel: "stylesheet", href: "/style.css")
+      link(rel: "icon", href: "/favicon.svg", type: "image/svg+xml")
+    }
+    body {
+      header(class: "top") {
+        a(class: "brand", href: "/") {
+          span(class: "prompt") { "$" }, " ", site.name
+        }
+        nav {
+          for item in nav {
+            if item.href == current {
+              a(href: item.href, class: "active", "aria-current": "page") { item.label }
+            } else {
+              a(href: item.href) { item.label }
+            }
+          }
+        }
+      }
+      main { children }
+      footer {
+        span { "© " + year() + " " + site.author }
+        span(class: "dim") { " · built with " }
+        a(href: "/complex") { "complex" }
+        span(class: "dim") { " · rendered " + now() }
+      }
+    }
+  }
+}
+
+// A line that looks like a shell command, used as a section heading.
+component cmd(text: Text) {
+  p(class: "cmd") { span(class: "prompt") { "$ " }, text }
+}

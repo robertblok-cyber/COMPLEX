@@ -1,0 +1,17 @@
+# RobertBlok.com — Fullstack development
+[package]
+name = "complex"
+version = "0.1.0"
+edition = "2021"
+description = "Complex: one language for the whole web application"
+license = "MIT"
+
+# No external crates: the compiler, type checker, interpreter and HTTP server
+# are built on the Rust standard library only.
+[dependencies]
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true

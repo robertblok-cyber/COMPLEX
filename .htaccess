@@ -1,0 +1,14 @@
+# RobertBlok.com — Fullstack development
+# Shared-hosting deploy: every request is answered by the Complex runtime in CGI mode.
+Options +ExecCGI
+AddHandler cgi-script .cgi
+DirectoryIndex index.cgi
+RewriteEngine On
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteRule ^(.*)$ index.cgi/$1 [L,QSA]
+<FilesMatch "^(index\.cgi|complex)$">
+  Require all granted
+</FilesMatch>
+<FilesMatch "\.(complex|toml|rs)$">
+  Require all denied
+</FilesMatch>
