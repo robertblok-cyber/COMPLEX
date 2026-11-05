@@ -3,6 +3,7 @@
 // complex — one language for the whole web application.
 //
 //   complex check <dir>            parse and type-check, run nothing
+//   complex audit <dir>            list every labelled field and every declassification
 //   complex parse <file>           print the syntax tree
 //   complex render <dir> <path>    print the HTML for one page
 //   complex serve <dir> [addr]     run the development server (default 127.0.0.1:8080)
@@ -25,7 +26,9 @@ use std::process::ExitCode;
 use std::sync::Arc;
 
 use ast::Program;
+use check::Audit;
 use http::{Request, Response};
+use interp::{RunError, Store};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -34,6 +37,7 @@ fn main() -> ExitCode {
     let cmd = args.get(1).map(|s| s.as_str()).unwrap_or("help");
     let result = match cmd {
         "check" => cmd_check(&args),
+        "audit" => cmd_audit(&args),
         "parse" => cmd_parse(&args),
         "render" => cmd_render(&args),
         "serve" => cmd_serve(&args),
@@ -63,6 +67,7 @@ complex — one language for the whole web application
 
 usage:
   complex check  <dir>            parse and type-check, run nothing
+  complex audit  <dir>            every labelled field, every declassification, every sink
   complex parse  <file>           print the syntax tree of one file
   complex render <dir> <path>     print the HTML for one page, e.g. /about
   complex serve  <dir> [addr]     development server, default 127.0.0.1:8080
@@ -77,7 +82,7 @@ fn arg(args: &[String], i: usize, what: &str) -> Result<String, String> {
 }
 
 /// Loads the site or prints every compile error and fails.
-fn load_or_report(dir: &Path) -> Result<Program, String> {
+fn load_or_report(dir: &Path) -> Result<(Program, Audit), String> {
     match site::load(dir) {
         Ok(p) => Ok(p),
         Err(errors) => {
@@ -87,13 +92,23 @@ fn load_or_report(dir: &Path) -> Result<Program, String> {
     }
 }
 
+fn plural(n: usize) -> &'static str {
+    if n == 1 {
+        ""
+    } else {
+        "s"
+    }
+}
+
 fn cmd_check(args: &[String]) -> Result<(), String> {
     let dir = PathBuf::from(arg(args, 2, "site folder")?);
-    let program = load_or_report(&dir)?;
+    let (program, audit) = load_or_report(&dir)?;
     println!(
-        "ok: {} file{}, {} component{}, {} page{}",
+        "ok: {} file{}, {} model{}, {} component{}, {} page{}",
         program.files.len(),
         plural(program.files.len()),
+        program.models.len(),
+        plural(program.models.len()),
         program.components.len(),
         plural(program.components.len()),
         program.pages.len(),
@@ -102,15 +117,52 @@ fn cmd_check(args: &[String]) -> Result<(), String> {
     for p in &program.pages {
         println!("  page {}", p.pattern);
     }
+    let n = audit.declassifications.len();
+    println!("information flow: {} labelled field{}, {} declassification{} (see `complex audit`)", audit.labeled_fields.len(), plural(audit.labeled_fields.len()), n, plural(n));
     Ok(())
 }
 
-fn plural(n: usize) -> &'static str {
-    if n == 1 {
-        ""
-    } else {
-        "s"
+/// The audit is the list of facts the checker proved. Everything on it is
+/// derived from the source, so it cannot drift from what the code does.
+fn cmd_audit(args: &[String]) -> Result<(), String> {
+    let dir = PathBuf::from(arg(args, 2, "site folder")?);
+    let (program, audit) = load_or_report(&dir)?;
+    println!("complex audit — {}", dir.display());
+    println!();
+    println!("labelled data");
+    if audit.labeled_fields.is_empty() {
+        println!("  (none)");
     }
+    for f in &audit.labeled_fields {
+        println!("  {:<28} {}", format!("{}.{}", f.model, f.field), f.label.name());
+    }
+    println!();
+    println!("declassifications ({})", audit.declassifications.len());
+    if audit.declassifications.is_empty() {
+        println!("  (none: labelled data never becomes public)");
+    }
+    for d in &audit.declassifications {
+        println!("  {}:{}:{}  {}()  {} -> public", d.file, d.pos.line, d.pos.col, d.how, d.from.name());
+        println!("      {}", d.line);
+    }
+    println!();
+    println!(
+        "sinks checked: {} view text{}, {} attribute{}, {} branch{}, {} loop{}, {} log line{}",
+        audit.sinks_view,
+        plural(audit.sinks_view),
+        audit.sinks_attr,
+        plural(audit.sinks_attr),
+        audit.sinks_branch,
+        if audit.sinks_branch == 1 { "" } else { "es" },
+        audit.sinks_loop,
+        plural(audit.sinks_loop),
+        audit.sinks_log,
+        plural(audit.sinks_log)
+    );
+    println!();
+    println!("result: no labelled value reaches a sink except through the declassifications above");
+    println!("        ({} model{}, {} page{}, checked by complex {VERSION})", program.models.len(), plural(program.models.len()), program.pages.len(), plural(program.pages.len()));
+    Ok(())
 }
 
 fn cmd_parse(args: &[String]) -> Result<(), String> {
@@ -130,8 +182,12 @@ fn cmd_parse(args: &[String]) -> Result<(), String> {
 fn cmd_render(args: &[String]) -> Result<(), String> {
     let dir = PathBuf::from(arg(args, 2, "site folder")?);
     let path = arg(args, 3, "page path, e.g. /")?;
-    let program = load_or_report(&dir)?;
-    let res = respond(&program, &dir, "GET", &path);
+    let (program, _) = load_or_report(&dir)?;
+    let store = Store::build(&program).map_err(|e| format!("{e:?}"))?;
+    let (res, log) = respond(&program, &store, &dir, "GET", &path);
+    for line in log {
+        eprintln!("log: {line}");
+    }
     if res.status != 200 {
         return Err(format!("{} {}", res.status, String::from_utf8_lossy(&res.body)));
     }
@@ -141,14 +197,22 @@ fn cmd_render(args: &[String]) -> Result<(), String> {
 fn cmd_serve(args: &[String]) -> Result<(), String> {
     let dir = PathBuf::from(arg(args, 2, "site folder")?);
     let addr = args.get(3).cloned().unwrap_or_else(|| "127.0.0.1:8080".into());
-    let program = load_or_report(&dir)?;
+    let (program, _) = load_or_report(&dir)?;
+    let store = Store::build(&program).map_err(|e| format!("{e:?}"))?;
     eprintln!("complex {VERSION} serving {} on http://{addr}/", dir.display());
     for p in &program.pages {
         eprintln!("  http://{addr}{}", p.pattern);
     }
     let dir = Arc::new(dir);
     let program = Arc::new(program);
-    let handler: Arc<http::Handler> = Arc::new(move |req: &Request| respond(&program, &dir, &req.method, &req.path));
+    let store = Arc::new(store);
+    let handler: Arc<http::Handler> = Arc::new(move |req: &Request| {
+        let (res, log) = respond(&program, &store, &dir, &req.method, &req.path);
+        for line in log {
+            eprintln!("{} log {line}", interp::format_utc(interp::unix_now()));
+        }
+        res
+    });
     http::serve(&addr, handler, true).map_err(|e| format!("cannot listen on {addr}: {e}"))
 }
 
@@ -162,7 +226,10 @@ fn cmd_cgi(args: &[String]) -> Result<(), String> {
     let _ = io::stdin().read_to_end(&mut body);
 
     let res = match site::load(&dir) {
-        Ok(program) => respond(&program, &dir, &method, &path),
+        Ok((program, _)) => match Store::build(&program) {
+            Ok(store) => respond(&program, &store, &dir, &method, &path).0,
+            Err(e) => Response::html(500, error_page("Runtime error", &interp::escape_text(&format!("{e:?}")))),
+        },
         Err(errors) => {
             let text: String = errors.iter().map(|e| e.render(false)).collect::<Vec<_>>().join("\n");
             Response::html(500, error_page("Compile error", &format!("<pre>{}</pre>", interp::escape_text(&text))))
@@ -178,22 +245,25 @@ fn cmd_cgi(args: &[String]) -> Result<(), String> {
     Ok(())
 }
 
-/// Turns a request into a response: a static file, a page, or an error page.
-fn respond(program: &Program, dir: &Path, method: &str, path: &str) -> Response {
+/// Turns a request into a response plus the log lines the page wrote.
+fn respond(program: &Program, store: &Store, dir: &Path, method: &str, path: &str) -> (Response, Vec<String>) {
+    let mut log = Vec::new();
     if method != "GET" && method != "HEAD" {
-        return Response::text(405, "method not allowed");
+        return (Response::text(405, "method not allowed"), log);
     }
     if let Some(res) = static_file(dir, path) {
-        return res;
+        return (res, log);
     }
     let Some((page, params)) = interp::route(program, path) else {
-        return Response::html(404, error_page("404", &format!("No page at <code>{}</code>.", interp::escape_text(path))));
+        return (Response::html(404, error_page("404", &format!("No page at <code>{}</code>.", interp::escape_text(path)))), log);
     };
-    let mut it = interp::Interpreter::new(program);
-    match it.render_page(page, &params) {
+    let mut it = interp::Interpreter::new(program, store);
+    let res = match it.render_page(page, &params, &mut log) {
         Ok(html) => Response::html(200, html),
-        Err(e) => Response::html(500, error_page("Runtime error", &interp::escape_text(&e))),
-    }
+        Err(RunError::NotFound(msg)) => Response::html(404, error_page("404", &interp::escape_text(&msg))),
+        Err(RunError::Internal(msg)) => Response::html(500, error_page("Runtime error", &interp::escape_text(&msg))),
+    };
+    (res, log)
 }
 
 /// Serves <dir>/public/<path> when it exists and the path stays inside it.

@@ -2,16 +2,18 @@
 //
 // A hand-written recursive descent parser: one function per grammar rule.
 //
-//   program   = { let | component | page }
+//   program   = { let | model | seed | component | page }
 //   let       = "let" NAME "=" expr
+//   model     = "model" NAME "{" { NAME ":" type [ "@" NAME ] [ "," ] } "}"
+//   seed      = "seed" NAME expr
 //   component = "component" NAME "(" [ param { "," param } ] ")" nodes
-//   page      = "page" TEXT "{" { let } "view" nodes "}"
+//   page      = "page" TEXT [ "(" params ")" ] "{" { let | "log" expr } "view" nodes "}"
 //   nodes     = "{" { node [ "," ] } "}"
 //   node      = for | if | element | expr
 //   element   = NAME [ "(" [ arg { "," arg } ] ")" ] [ nodes ]
 //   expr      = sum { ("==" | "!=") sum }
 //   sum       = postfix { "+" postfix }
-//   postfix   = primary { "." NAME }
+//   postfix   = primary { "." NAME | "[" expr "]" }
 //   primary   = TEXT | INT | "true" | "false" | list | record | call | NAME | "(" expr ")"
 
 use crate::ast::*;
@@ -37,6 +39,14 @@ pub fn parse(file: &str, src: &str, toks: Vec<Token>, program: &mut Program) -> 
                 let l = p.let_decl()?;
                 program.lets.push(l);
             }
+            Tok::Kw(Kw::Model) => {
+                let m = p.model()?;
+                program.models.push(m);
+            }
+            Tok::Kw(Kw::Seed) => {
+                let s = p.seed()?;
+                program.seeds.push(s);
+            }
             Tok::Kw(Kw::Component) => {
                 let c = p.component()?;
                 program.components.push(c);
@@ -46,7 +56,8 @@ pub fn parse(file: &str, src: &str, toks: Vec<Token>, program: &mut Program) -> 
                 program.pages.push(pg);
             }
             other => {
-                return Err(p.err_here(format!("expected 'let', 'component' or 'page', found {}", other.describe()))
+                return Err(p
+                    .err_here(format!("expected 'let', 'model', 'seed', 'component' or 'page', found {}", other.describe()))
                     .hint("a .complex file is a list of declarations"));
             }
         }
@@ -138,9 +149,43 @@ impl<'a> Parser<'a> {
         Ok(Let { pos, file: self.file.to_string(), name, value })
     }
 
-    fn component(&mut self) -> PResult<Component> {
-        let pos = self.expect_kw(Kw::Component)?;
-        let (name, _) = self.expect_name("a component name")?;
+    fn model(&mut self) -> PResult<Model> {
+        let pos = self.expect_kw(Kw::Model)?;
+        let (name, npos) = self.expect_name("a model name")?;
+        if !name.chars().next().is_some_and(|c| c.is_uppercase()) {
+            return Err(CompileError::new(self.file, self.src, npos, format!("model names start with a capital: '{name}'"))
+                .hint("models are types, like Citizen or Artwork"));
+        }
+        self.expect_punct("{")?;
+        let mut fields = Vec::new();
+        while !self.is_punct("}") {
+            if self.peek() == &Tok::Eof {
+                return Err(self.err_here("model is never closed").hint("add a closing '}'"));
+            }
+            let (fname, fpos) = self.expect_name("a field name")?;
+            self.expect_punct(":").map_err(|e| e.hint("fields need a type, like `name: Text`"))?;
+            let ty = self.type_expr()?;
+            let label = if self.eat_punct("@") {
+                let (l, lpos) = self.expect_name("a label after '@'")?;
+                Some((l, lpos))
+            } else {
+                None
+            };
+            fields.push(ModelField { pos: fpos, name: fname, ty, label });
+            self.eat_punct(",");
+        }
+        self.expect_punct("}")?;
+        Ok(Model { pos, file: self.file.to_string(), name, fields })
+    }
+
+    fn seed(&mut self) -> PResult<Seed> {
+        let pos = self.expect_kw(Kw::Seed)?;
+        let (model, _) = self.expect_name("a model name after 'seed'")?;
+        let value = self.expr()?;
+        Ok(Seed { pos, file: self.file.to_string(), model, value })
+    }
+
+    fn params(&mut self) -> PResult<Vec<Param>> {
         self.expect_punct("(")?;
         let mut params = Vec::new();
         while !self.is_punct(")") {
@@ -153,6 +198,13 @@ impl<'a> Parser<'a> {
             }
         }
         self.expect_punct(")")?;
+        Ok(params)
+    }
+
+    fn component(&mut self) -> PResult<Component> {
+        let pos = self.expect_kw(Kw::Component)?;
+        let (name, _) = self.expect_name("a component name")?;
+        let params = self.params()?;
         let body = self.nodes()?;
         Ok(Component { pos, file: self.file.to_string(), name, params, body })
     }
@@ -188,15 +240,24 @@ impl<'a> Parser<'a> {
         if !pattern.starts_with('/') {
             return Err(CompileError::new(self.file, self.src, pos, format!("page address \"{pattern}\" must start with '/'")));
         }
+        let params = if self.is_punct("(") { self.params()? } else { Vec::new() };
         self.expect_punct("{")?;
-        let mut lets = Vec::new();
-        while self.peek() == &Tok::Kw(Kw::Let) {
-            lets.push(self.let_decl()?);
+        let mut stmts = Vec::new();
+        loop {
+            match self.peek() {
+                Tok::Kw(Kw::Let) => stmts.push(Stmt::Let(self.let_decl()?)),
+                Tok::Kw(Kw::Log) => {
+                    let lpos = self.advance().pos;
+                    let value = self.expr()?;
+                    stmts.push(Stmt::Log { pos: lpos, value });
+                }
+                _ => break,
+            }
         }
         self.expect_kw(Kw::View).map_err(|e| e.hint("a page ends with a `view { ... }` block"))?;
         let view = self.nodes()?;
         self.expect_punct("}")?;
-        Ok(Page { pos, file: self.file.to_string(), pattern, lets, view })
+        Ok(Page { pos, file: self.file.to_string(), pattern, params, stmts, view })
     }
 
     // ---- view nodes ---------------------------------------------------------
@@ -331,12 +392,20 @@ impl<'a> Parser<'a> {
 
     fn postfix(&mut self) -> PResult<Expr> {
         let mut e = self.primary()?;
-        while self.is_punct(".") {
-            let pos = self.advance().pos;
-            let (name, _) = self.expect_name("a field name after '.'")?;
-            e = Expr::Field { pos, target: Box::new(e), name };
+        loop {
+            if self.is_punct(".") {
+                let pos = self.advance().pos;
+                let (name, _) = self.expect_name("a field name after '.'")?;
+                e = Expr::Field { pos, target: Box::new(e), name };
+            } else if self.is_punct("[") {
+                let pos = self.advance().pos;
+                let index = self.expr()?;
+                self.expect_punct("]")?;
+                e = Expr::Index { pos, target: Box::new(e), index: Box::new(index) };
+            } else {
+                return Ok(e);
+            }
         }
-        Ok(e)
     }
 
     fn primary(&mut self) -> PResult<Expr> {

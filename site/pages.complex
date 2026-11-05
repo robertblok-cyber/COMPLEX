@@ -1,22 +1,24 @@
 // RobertBlok.com — Fullstack development
 //
-// Home, the page about Complex itself, and contact.
+// What Complex is, why it exists, and where it is going.
 
 page "/" {
-  let intro = "Fullstack developer. Twenty years of building for the web, most of it for government."
   view {
     layout(title: "Home", current: "/") {
-      cmd(text: "whoami")
-      h1 { site.author }
-      p(class: "lead") { intro }
+      cmd(text: "complex version")
+      h1 { "Complex" }
+      p(class: "lead") { "One language for the whole web application: database, server and browser in one source, with a compiler that refuses unsafe code." }
 
       cmd(text: "cat README.md")
       p {
-        "This site is not written in PHP, JavaScript or HTML. It is written in ",
-        a(href: "/complex") { "Complex" },
-        ", a programming language I am building: one language for database, server and browser, with a compiler that refuses unsafe code."
+        "A normal web application is four languages that do not know each other: SQL, PHP or Node, JavaScript and HTML. Rename a column and a visitor is the first to notice the page is broken. Every boundary between those layers is handwork — an API route, a fetch, a permission check — and that is where most mistakes live."
       }
-      p { "Every page you see here is a " code { ".complex" } " file, rendered by a runtime written in Rust." }
+      p {
+        "Complex puts the whole application in one language. The compiler decides what runs where, generates the API in between, and refuses code that is unsafe. This site is the first thing running on it: every page here is a ", code { ".complex" }, " file."
+      }
+
+      cmd(text: "cat status.txt")
+      p { "Version 0.2. A lexer, a parser, a type checker with information flow control, a tree-walking interpreter and an HTTP server, written in Rust on the standard library alone. No framework, no dependencies, one binary." }
 
       cmd(text: "ls")
       ul(class: "links") {
@@ -30,51 +32,104 @@ page "/" {
   }
 }
 
-page "/complex" {
+page "/why" {
   let principles = [
-    { n: "01", title: "Complex in power, simple to read.",      body: "The compiler does the hard work. Syntax is a user interface." },
-    { n: "02", title: "One type from database to screen.",      body: "A field exists once. Rename it and the build breaks, never a visitor." },
-    { n: "03", title: "Security is grammar.",                   body: "A secret cannot reach a view. A server action without a permission rule does not compile." },
-    { n: "04", title: "Errors are values, not exceptions.",     body: "Every call to the outside has a timeout and a fallback." },
-    { n: "05", title: "Adoption is a requirement.",             body: "One binary, built-in storage, error messages written for humans." }
+    { n: "01", title: "Complex in power, simple to read.",   body: "The compiler does the hard work. Syntax is a user interface: whoever reads a page sees what it does." },
+    { n: "02", title: "One type from database to screen.",   body: "A field exists once. Rename it or change its type and the build breaks, never a visitor." },
+    { n: "03", title: "Security is grammar.",                body: "A secret cannot reach a view. A server action without a permission rule does not compile. An internal address cannot end up in HTML." },
+    { n: "04", title: "Errors are values, not exceptions.",  body: "Every call to the outside has a timeout and a fallback. An error cannot reach the type of a cache, so it is never cached." },
+    { n: "05", title: "Adoption is a requirement.",          body: "One binary you start on any server, built-in storage, error messages written for humans with a suggested fix, and a bridge to existing PHP and JavaScript." }
   ]
-  // A demonstration of information flow control: the type system
-  // guarantees this value can only appear masked.
-  let api_key = secret("sk-live-4f9a2c7e1b")
-
   view {
-    layout(title: "Complex", current: "/complex") {
-      cmd(text: "complex version")
-      h1 { "Complex" }
-      p(class: "lead") { "One language for the whole web application." }
+    layout(title: "Why", current: "/why") {
+      cmd(text: "cat why.md")
+      h1 { "Why Complex exists" }
+      p(class: "lead") { "Tierless languages have been tried before: Links (Edinburgh), Ur/Web (MIT), Opa. They worked and nobody used them. Complex starts from the other end: adoption is a design requirement from day one." }
 
       cmd(text: "cat principles.md")
+      p { "Five rules decide every doubt about the language. If a proposal does not fit, it does not go in." }
       ol(class: "principles") {
         for p in principles {
           li { span(class: "n") { p.n }, strong { p.title }, " ", p.body }
         }
       }
 
-      cmd(text: "cat secret.complex")
-      p {
-        "This page holds a value of type ", code { "Secret<Text>" },
-        ". Writing it into the view is a compile error, so the only thing that can ever be shown is this: ",
-        code { masked(api_key, 4) }
-      }
-      p(class: "dim") { "The compiler proves it. No code review has to find it." }
-
-      cmd(text: "git remote -v")
-      p { a(href: site.github) { site.github } }
+      cmd(text: "cat goal.txt")
+      p { "The goal is a language a working developer can pick up on a Monday and ship with on Friday, that makes a whole class of mistakes impossible instead of merely unlikely." }
     }
   }
 }
 
-page "/contact" {
+page "/language" {
+  let keywords = [
+    { kw: "model",              what: "a stored record type",            makes: "table, migration, validation" },
+    { kw: "query",              what: "a named question to the store",   makes: "an optimised query with a typed result" },
+    { kw: "page",               what: "an address with parameters",      makes: "route, parameter validation, HTML" },
+    { kw: "view",               what: "what the visitor sees",           makes: "HTML on the server, reactive updates in the browser" },
+    { kw: "action … on server", what: "something the visitor triggers",  makes: "an API endpoint plus the call from the browser" },
+    { kw: "require",            what: "a permission rule",               makes: "a check before the action; without it the action does not compile" },
+    { kw: "fetch … on error",   what: "a call to the outside",           makes: "timeout, fallback, cache of successes only" }
+  ]
+  let example = "model Artwork {\n  title:       Text\n  inaugurated: Date~\n  location:    Geo\n}\n\npage \"/artwork/:id\" (id: Id<Artwork>) {\n  let art = Artwork[id]\n  view { h1 { art.title } }\n\n  action rename(title: Text) on server {\n    require user.can(edit: art)\n    art.title = title\n  }\n}"
   view {
-    layout(title: "Contact", current: "/contact") {
-      cmd(text: "cat contact.txt")
-      p { "Mail: ", a(href: "mailto:" + site.email) { site.email } }
-      p { "Code: ", a(href: site.github) { "github.com/robertblok-cyber" } }
+    layout(title: "Language", current: "/language") {
+      cmd(text: "cat language.md")
+      h1 { "The language" }
+      p(class: "lead") { "Seven keywords carry the language; the rest is ordinary expressions, functions and types." }
+
+      table {
+        thead { tr { th { "keyword" }, th { "what it is" }, th { "what the compiler makes of it" } } }
+        tbody {
+          for k in keywords {
+            tr { td { code { k.kw } }, td { k.what }, td { k.makes } }
+          }
+        }
+      }
+
+      cmd(text: "cat example.complex")
+      src(code: example)
+
+      cmd(text: "cat implemented.txt")
+      p { "In version 0.2: ", code { "model" }, ", ", code { "page" }, ", ", code { "view" }, ", components, typed URL parameters, and information flow control. ", code { "query" }, ", ", code { "action" }, ", ", code { "require" }, " and ", code { "fetch" }, " are on the ", a(href: "/roadmap") { "roadmap" }, "." }
+    }
+  }
+}
+
+page "/roadmap" {
+  let phases = [
+    { n: "0", name: "Design",         gives: "ten example programs and a one-page grammar",                     state: "in progress" },
+    { n: "1", name: "Lexer, parser",  gives: "complex parse prints the syntax tree",                            state: "done" },
+    { n: "2", name: "Interpreter",    gives: "model, page and view run; a page appears on localhost",            state: "done" },
+    { n: "3", name: "Type checker",   gives: "a renamed field is a compile error with a line number and a fix", state: "done" },
+    { n: "3b", name: "Information flow", gives: "labelled data cannot leak; complex audit lists every crossing", state: "done" },
+    { n: "4", name: "Storage",        gives: "query over SQLite, migrations from the model",                     state: "next" },
+    { n: "5", name: "Splitter",       gives: "action on server becomes an endpoint; the browser gets JavaScript", state: "planned" },
+    { n: "6", name: "Bytecode VM",    gives: "the same programs, noticeably faster",                             state: "planned" }
+  ]
+  view {
+    layout(title: "Roadmap", current: "/roadmap") {
+      cmd(text: "cat roadmap.md")
+      h1 { "Roadmap" }
+      p(class: "lead") { "Each phase ends with something that runs. The splitter is the new part: everything before it exists in every compiler, everything after it is the reason Complex exists." }
+      table {
+        thead { tr { th { "phase" }, th { "what works at the end" }, th { "state" } } }
+        tbody {
+          for p in phases {
+            tr {
+              td { p.n, ". ", p.name }
+              td { p.gives }
+              td { if p.state == "done" { span(class: "badge live") { p.state } } else { span(class: "badge") { p.state } } }
+            }
+          }
+        }
+      }
+      cmd(text: "cat decisions.md")
+      ul {
+        li { "Name and extension: Complex, files ", code { ".complex" }, " (decided 2 November 2026)." }
+        li { "Runtime language: Rust, standard library only. Self-hosting is the long-term goal." }
+        li { "Storage: SQLite built in first, PostgreSQL later." }
+        li { "Open: fine-grained reactivity or full re-render in the browser; sessions as a language feature or a library." }
+      }
     }
   }
 }

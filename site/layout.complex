@@ -4,18 +4,18 @@
 // Everything in this folder is one program; files only group it.
 
 let site = {
-  name:    "robertblok.com",
-  tagline: "Fullstack development",
+  name:    "complex",
+  tagline: "one language for the whole web application",
   author:  "Robert Blok",
-  email:   "info@robertblok.com",
   github:  "https://github.com/robertblok-cyber/COMPLEX"
 }
 
 let nav = [
-  { href: "/",         label: "~" },
-  { href: "/work",     label: "work" },
-  { href: "/complex",  label: "complex" },
-  { href: "/contact",  label: "contact" }
+  { href: "/",           label: "~" },
+  { href: "/why",        label: "why" },
+  { href: "/language",   label: "language" },
+  { href: "/privacy",    label: "privacy" },
+  { href: "/roadmap",    label: "roadmap" }
 ]
 
 // The page shell: head, header with navigation, content, footer.
@@ -25,7 +25,7 @@ component layout(title: Text, current: Text) {
       meta(charset: "utf-8")
       meta(name: "viewport", content: "width=device-width, initial-scale=1")
       title { title + " — " + site.name }
-      meta(name: "description", content: site.author + " — " + site.tagline)
+      meta(name: "description", content: site.name + ": " + site.tagline)
       link(rel: "stylesheet", href: "/style.css")
       link(rel: "icon", href: "/favicon.svg", type: "image/svg+xml")
     }
@@ -47,9 +47,8 @@ component layout(title: Text, current: Text) {
       main { children }
       footer {
         span { "© " + year() + " " + site.author }
-        span(class: "dim") { " · built with " }
-        a(href: "/complex") { "complex" }
-        span(class: "dim") { " · rendered " + now() }
+        span(class: "dim") { " · this page is a .complex file, rendered by complex 0.2 · " }
+        a(href: site.github) { "source" }
       }
     }
   }
@@ -58,4 +57,9 @@ component layout(title: Text, current: Text) {
 // A line that looks like a shell command, used as a section heading.
 component cmd(text: Text) {
   p(class: "cmd") { span(class: "prompt") { "$ " }, text }
+}
+
+// A block of Complex source, shown as code.
+component src(code: Text) {
+  pre(class: "src") { code }
 }

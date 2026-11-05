@@ -1,0 +1,77 @@
+// RobertBlok.com — Fullstack development
+//
+// Information flow control, live. The labels on the model below are the
+// only privacy policy this page has; the compiler enforces it.
+// All records are fictional.
+
+model Citizen {
+  name:   Text
+  city:   Text
+  email:  Text @personal
+  bsn:    Text @secret
+}
+
+seed Citizen [
+  { name: "A. Voorbeeld",  city: "Hattem",  email: "a.voorbeeld@example.org",  bsn: "999990019" },
+  { name: "B. Demo",       city: "Kampen",  email: "b.demo@example.org",       bsn: "999990020" },
+  { name: "C. Fictief",    city: "Zwolle",  email: "c.fictief@example.org",    bsn: "999990032" }
+]
+
+page "/privacy" {
+  let leak = "page \"/citizen/:id\" (id: Int) {\n  let c = Citizen[id]\n  log \"viewed \" + c.email        // error: Personal<Text> cannot be written to the log\n  view {\n    p { c.bsn }                    // error: Secret<Text> cannot be shown in a view\n    if c.bsn == \"999990019\" { }    // error: cannot branch on secret data\n    a(href: \"/x?e=\" + c.email) { } // error: Personal<Text> cannot be placed in 'href'\n  }\n}"
+  let fixed = "page \"/citizen/:id\" (id: Int) {\n  let c = Citizen[id]\n  log \"viewed citizen \" + id\n  view {\n    p { c.name }\n    p { masked(c.bsn, 3) }          // ok: explicit, and listed by `complex audit`\n    p { reveal(c.email) }           // ok: explicit, and listed by `complex audit`\n  }\n}"
+  let audit = "$ complex audit site\n\nlabelled data\n  Citizen.email                personal\n  Citizen.bsn                  secret\n\ndeclassifications (2)\n  privacy.complex:62:21  masked()  secret -> public\n      p { masked(c.bsn, 3) }\n  privacy.complex:63:21  reveal()  personal -> public\n      p { reveal(c.email) }\n\nresult: no labelled value reaches a sink except through the declassifications above"
+  view {
+    layout(title: "Privacy", current: "/privacy") {
+      cmd(text: "cat privacy.md")
+      h1 { "Information flow control" }
+      p(class: "lead") { "A label on a field is the whole privacy policy. The compiler carries it everywhere the value goes and refuses every path to a page, an attribute, a branch, a loop or a log line. The only way across is explicit, and every crossing is listed." }
+
+      cmd(text: "cat model.complex")
+      src(code: "model Citizen {\n  name:   Text\n  city:   Text\n  email:  Text @personal\n  bsn:    Text @secret\n}")
+      p { "Three labels, ordered: ", code { "public < personal < secret" }, ". Anything computed from labelled data carries the highest label of its inputs. A secret can only leave through ", code { "masked()" }, "; personal data only through ", code { "reveal()" }, "." }
+
+      cmd(text: "complex check leak.complex")
+      p { "This does not compile. Four leaks, four errors, each with a line number and a fix:" }
+      src(code: leak)
+
+      cmd(text: "cat fixed.complex")
+      src(code: fixed)
+
+      cmd(text: "complex audit site")
+      p { "The audit is not a document someone wrote. It is derived from the source by the compiler, so it cannot drift from what the code does:" }
+      src(code: audit)
+
+      cmd(text: "ls /citizen")
+      p { "Live, from this very model:" }
+      ul(class: "links") {
+        for c in Citizen.all {
+          li { c.name, span(class: "dim") { " · " + c.city } }
+        }
+      }
+      p(class: "dim") { "Or by id: ", a(href: "/citizen/1") { "/citizen/1" }, ", ", a(href: "/citizen/2") { "/citizen/2" }, ", ", a(href: "/citizen/3") { "/citizen/3" }, ". Try ", a(href: "/citizen/9") { "/citizen/9" }, " for a 404." }
+    }
+  }
+}
+
+page "/citizen/:id" (id: Int) {
+  let c = Citizen[id]
+  log "viewed citizen " + id
+  view {
+    layout(title: "Citizen", current: "/privacy") {
+      cmd(text: "cat /citizen/" + id)
+      h1 { c.name }
+      p(class: "meta") { c.city }
+      table {
+        tbody {
+          tr { th { "name" },  td { c.name },             td(class: "dim") { "public" } }
+          tr { th { "city" },  td { c.city },             td(class: "dim") { "public" } }
+          tr { th { "email" }, td { reveal(c.email) },    td(class: "dim") { "personal · shown through reveal()" } }
+          tr { th { "bsn" },   td { masked(c.bsn, 3) },   td(class: "dim") { "secret · only masked(…, 3) can ever show it" } }
+        }
+      }
+      p(class: "dim") { "Writing ", code { "c.bsn" }, " into this page is a compile error. The server log got ", code { "viewed citizen " + id }, " and nothing else: the label on email forbids logging it." }
+      p { a(href: "/privacy") { "← back" } }
+    }
+  }
+}

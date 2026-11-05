@@ -27,6 +27,9 @@ pub enum Kw {
     Else,
     True,
     False,
+    Model,
+    Seed,
+    Log,
 }
 
 #[derive(Debug, Clone)]
@@ -61,6 +64,9 @@ pub fn kw_text(k: Kw) -> &'static str {
         Kw::Else => "else",
         Kw::True => "true",
         Kw::False => "false",
+        Kw::Model => "model",
+        Kw::Seed => "seed",
+        Kw::Log => "log",
     }
 }
 
@@ -76,12 +82,15 @@ fn keyword(word: &str) -> Option<Kw> {
         "else" => Kw::Else,
         "true" => Kw::True,
         "false" => Kw::False,
+        "model" => Kw::Model,
+        "seed" => Kw::Seed,
+        "log" => Kw::Log,
         _ => return None,
     })
 }
 
 const PUNCT2: [&str; 2] = ["==", "!="];
-const PUNCT1: [&str; 13] = ["{", "}", "(", ")", "[", "]", ",", ":", ".", "=", "+", "<", ">"];
+const PUNCT1: [&str; 14] = ["{", "}", "(", ")", "[", "]", ",", ":", ".", "=", "+", "<", ">", "@"];
 
 pub fn lex(file: &str, src: &str) -> Result<Vec<Token>, CompileError> {
     let chars: Vec<char> = src.chars().collect();

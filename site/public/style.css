@@ -71,3 +71,11 @@ footer {
   header.top { flex-direction: column; align-items: flex-start; }
   nav { gap: 1rem; }
 }
+
+pre.src {
+  background: var(--bg-2); border: 1px solid var(--line); border-radius: 6px;
+  padding: 0.9rem 1rem; overflow-x: auto; font-size: 0.88rem; line-height: 1.5; color: var(--fg);
+}
+table { border-collapse: collapse; width: 100%; margin: 0.5rem 0 1rem; font-size: 0.92rem; }
+th, td { text-align: left; padding: 0.45rem 0.6rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--dim); font-weight: 500; }

@@ -10,6 +10,8 @@ use crate::error::Pos;
 pub struct Program {
     pub files: Vec<SourceFile>,
     pub lets: Vec<Let>,
+    pub models: Vec<Model>,
+    pub seeds: Vec<Seed>,
     pub components: Vec<Component>,
     pub pages: Vec<Page>,
 }
@@ -28,6 +30,14 @@ pub struct Let {
     pub value: Expr,
 }
 
+/// A statement in a page's setup section, before `view`.
+#[derive(Debug, Clone)]
+pub enum Stmt {
+    Let(Let),
+    /// `log expr` writes a line to the server log: a sink that only accepts public data.
+    Log { pos: Pos, value: Expr },
+}
+
 #[derive(Debug, Clone)]
 pub struct Param {
     pub pos: Pos,
@@ -35,12 +45,41 @@ pub struct Param {
     pub ty: TypeExpr,
 }
 
-/// A type as written in source: `Text`, `[Text]`, `Secret<Text>`.
+/// A type as written in source: `Text`, `[Text]`, `Secret<Text>`, `Citizen`.
 #[derive(Debug, Clone, PartialEq)]
 pub enum TypeExpr {
     Named(String),
     List(Box<TypeExpr>),
     Generic(String, Box<TypeExpr>),
+}
+
+/// `model Citizen { name: Text, bsn: Text @secret }`
+/// A stored record type. Labels on fields are where information flow control starts:
+/// the label is attached at the source, and the checker carries it everywhere the value goes.
+#[derive(Debug, Clone)]
+pub struct Model {
+    pub pos: Pos,
+    pub file: String,
+    pub name: String,
+    pub fields: Vec<ModelField>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ModelField {
+    pub pos: Pos,
+    pub name: String,
+    pub ty: TypeExpr,
+    /// `@secret` or `@personal`; None means public.
+    pub label: Option<(String, Pos)>,
+}
+
+/// `seed Citizen [ { ... }, { ... } ]` — records loaded into the store at startup.
+#[derive(Debug, Clone)]
+pub struct Seed {
+    pub pos: Pos,
+    pub file: String,
+    pub model: String,
+    pub value: Expr,
 }
 
 #[derive(Debug, Clone)]
@@ -57,7 +96,9 @@ pub struct Page {
     pub pos: Pos,
     pub file: String,
     pub pattern: String,
-    pub lets: Vec<Let>,
+    /// Declared types for URL parameters; undeclared ones are Text.
+    pub params: Vec<Param>,
+    pub stmts: Vec<Stmt>,
     pub view: Vec<Node>,
 }
 
@@ -89,6 +130,8 @@ pub enum Expr {
     Record { pos: Pos, fields: Vec<Arg> },
     Name { pos: Pos, name: String },
     Field { pos: Pos, target: Box<Expr>, name: String },
+    /// `Citizen[id]`: one record of a model by its id.
+    Index { pos: Pos, target: Box<Expr>, index: Box<Expr> },
     Call { pos: Pos, name: String, args: Vec<Expr> },
     Binary { pos: Pos, op: BinOp, left: Box<Expr>, right: Box<Expr> },
 }
@@ -110,6 +153,7 @@ impl Expr {
             | Expr::Record { pos, .. }
             | Expr::Name { pos, .. }
             | Expr::Field { pos, .. }
+            | Expr::Index { pos, .. }
             | Expr::Call { pos, .. }
             | Expr::Binary { pos, .. } => *pos,
         }
@@ -117,7 +161,7 @@ impl Expr {
 }
 
 /// Built-in functions of the core language.
-pub const BUILTINS: [&str; 6] = ["now", "year", "len", "upper", "secret", "masked"];
+pub const BUILTINS: [&str; 7] = ["now", "year", "len", "upper", "secret", "masked", "reveal"];
 
 /// HTML elements that never have children.
 pub const VOID_TAGS: [&str; 8] = ["br", "hr", "img", "input", "meta", "link", "wbr", "source"];

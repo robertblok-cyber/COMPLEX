@@ -7,12 +7,12 @@ use std::fs;
 use std::path::Path;
 
 use crate::ast::Program;
-use crate::check;
+use crate::check::{self, Audit};
 use crate::error::CompileError;
 use crate::lexer;
 use crate::parser;
 
-pub fn load(dir: &Path) -> Result<Program, Vec<CompileError>> {
+pub fn load(dir: &Path) -> Result<(Program, Audit), Vec<CompileError>> {
     let mut files: Vec<_> = match fs::read_dir(dir) {
         Ok(rd) => rd
             .filter_map(|e| e.ok().map(|e| e.path()))
@@ -44,8 +44,8 @@ pub fn load(dir: &Path) -> Result<Program, Vec<CompileError>> {
     if !errors.is_empty() {
         return Err(errors);
     }
-    check::check(&program)?;
-    Ok(program)
+    let audit = check::check(&program)?;
+    Ok((program, audit))
 }
 
 fn io_error(path: &Path, msg: &str) -> CompileError {
